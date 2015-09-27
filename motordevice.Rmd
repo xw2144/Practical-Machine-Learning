@@ -1,0 +1,88 @@
+---
+title: "Predicting Exercising Manner Using Accelerometers Data"
+author: "X.W."
+date: "September 26, 2015"
+output: html_document
+---
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell to predict the way they performed the exercises.
+
+## Preparing Data
+Data pml-training.csv was downloaded from Coursera website to R working directory on local drive.  We first read in the training data and use na.string to unify the 3 missing data types: blank, NA and #DIV/0!.
+```{r eval=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+
+pmltrain <- read.csv("pml-training.csv", na.string=c("", "NA", "#DIV/0!"))
+pmltrain <- pmltrain[, -1]
+```
+
+Then we slice the data into 5 folds, preparing for cross validation.
+```{r eval=FALSE}
+set.seed(150927) 
+folds <- createFolds(pmltrain$classe, k=5, list=FALSE)
+```
+
+We notice that there are a great proportion of variables with the majority of values missing.
+For each fold of training data, we remove the variables with 95% data missing. For a more thorough analysis, we should study how predictive those variables are before removing them.
+
+```{r eval=FALSE}
+nacount <- function(x){sum(is.na(x))}
+mytrain <- list(5)
+mytest <- list(5)
+misspercent <- list(5)
+mytrain1 <- list(5)
+mytest1 <- list(5)
+for (k in 1:5){
+    mytrain[[k]] <- pmltrain[(folds!=k),]
+    mytest[[k]] <- pmltrain[(folds==k),]
+    misspercent[[k]] <- apply(mytrain[[k]], 2, nacount)/nrow(mytrain[[k]])
+    missmost <- which(misspercent[[k]] > 0.95)
+    mytrain1[[k]] <- mytrain[[k]][, -missmost]
+    mytest1[[k]] <- mytest[[k]][, -missmost]
+}
+```
+
+## Decision Tree 
+We first fit decision tree to each training set and get the prediction error for 
+the corresponding testing set.  Then we average the prediction errors to estimate the out of sample error.
+
+```{r eval=FALSE}
+set.seed(333828)
+modFittree <- list(5)
+predtree <- list(5)
+err.tree <- rep(0,5)
+for (k in 1:5){
+    modFittree[[k]] <- rpart(classe ~ ., data=mytrain1[[k]], method="class")
+    predtree[[k]] <- predict(modFittree[[k]], newdata=mytest1[[k]], type="class")
+    err.tree[k] <- sum(predtree[[k]]!=mytest1[[k]]$classe)/nrow(mytest1[[k]])
+}
+outsampleerr.tree <- mean(err.tree)
+```
+The out of sample error based on decision tree method is estimated to be 13.0%.
+
+## Random Forest 
+
+Next we apply random forest method to each training set and get the prediction error for 
+the corresponding testing set.  Then we average the prediction errors to estimate the out of sample error.
+
+```{r eval=FALSE}
+set.seed(416397)
+modFitrf <- list(5)
+predrf <- list(5)
+err.rf <- rep(0,5)
+for (k in 1:5){
+    modFitrf[[k]] <- randomForest(classe ~ ., data=mytrain1[[k]])
+    predrf[[k]] <- predict(modFitrf[[k]], newdata=mytest1[[k]], type="class")
+    err.rf[k] <- sum(predrf[[k]]!=mytest1[[k]]$classe)/nrow(mytest1[[k]])
+}
+outsampleerr.rf <- mean(err.rf)
+```
+The out of sample error based on random forest method is estimated to be 0.1%.  
+
+Since the accuracy of random forest method on the accelerometers data is so high, we will use random forest to make the prediction for the 20 test cases.
